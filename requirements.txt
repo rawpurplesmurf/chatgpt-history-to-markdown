@@ -1,0 +1,4 @@
+# ChatGPT History Converter - Python Dependencies
+
+# Mermaid diagram rendering
+pyppeteer>=1.0.2
