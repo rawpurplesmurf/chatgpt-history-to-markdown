@@ -19,7 +19,7 @@ import struct
 import threading
 from array import array
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -421,7 +421,7 @@ class SearchIndexBuilder:
             "embedding_dim": embedding_dim,
             "chunk_words": self.chunk_words,
             "chunk_overlap": self.chunk_overlap,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "items": meta_items,
         }
         self.meta_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
