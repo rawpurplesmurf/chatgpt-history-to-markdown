@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local input + generated output
+markdown/
+chatgpt-history-source/*
+!chatgpt-history-source/.gitkeep
+

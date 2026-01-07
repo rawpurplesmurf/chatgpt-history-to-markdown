@@ -4,6 +4,16 @@ All notable changes to the ChatGPT History Converter will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+- Hybrid search index (FTS5 keyword + optional vector embeddings) built during conversion.
+- `/search` endpoint and web UI search panel for fast retrieval.
+- `run_with_vectors.sh` helper to create a venv, install vector dependencies, and run the converter.
+- Basic unittest coverage for the search index builder and query behavior.
+- Node-based UI smoke test for search panel structure.
+- Advanced search controls (mode, scope, role, date range, sort, limit, snippet size).
+
 ## [2.0.0] - 2026-01-03
 
 ### Added
@@ -46,4 +56,3 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Simple index generation
 - Filename sanitization
 - Date-based organization
-
