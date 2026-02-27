@@ -14,13 +14,13 @@ DONE
 - [2026-02-27 08:30] Root cause investigation: confirmed backend fully functional; issue is
   first-load model latency (20-40s). All three search modes verified via direct Python test
   and live curl. (Skills: athena, superpowers:systematic-debugging)
+- [2026-02-27 09:00] T-001: serve.py — startup log indicates vector search ready/disabled. (Skills: athena)
+- [2026-02-27 09:00] T-002: serve.py — background daemon thread pre-warms search index at startup. (Skills: athena)
+- [2026-02-27 09:00] T-003: web/index.html — 90s AbortController timeout on fetch; specific "timed out" message shown. (Skills: athena)
 
 IN PROGRESS
 
 NEXT
-- T-001: Add startup log line in serve.py indicating vector search enabled/disabled. (Implements: FR-002)
-- T-002: Pre-warm sentence-transformer model in background thread at serve.py startup. (Implements: FR-003)
-- T-003: Verify/fix UI "Searching..." state persists during long model-load waits. (Implements: FR-001)
 
 NOTES
 - Commands run:

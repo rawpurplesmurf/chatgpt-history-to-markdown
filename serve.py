@@ -232,6 +232,17 @@ def main() -> int:
     url = f"http://{args.host}:{args.port}/"
     logger.info("Serving ChatGPT archive at %s", url)
 
+    def _prewarm() -> None:
+        idx = httpd.get_search_index()
+        if idx is None:
+            logger.info("Search index not found — search unavailable.")
+        elif getattr(idx, "_embedder", None) is not None:
+            logger.info("Vector search ready (model: %s).", getattr(idx, "_embedding_model", "unknown"))
+        else:
+            logger.info("Search ready (keyword only — no vector embeddings loaded).")
+
+    threading.Thread(target=_prewarm, daemon=True, name="search-prewarm").start()
+
     if args.open:
         try:
             import webbrowser

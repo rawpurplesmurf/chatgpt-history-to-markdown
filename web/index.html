@@ -771,16 +771,27 @@
           if (from) params.set("from", from);
           if (to) params.set("to", to);
 
-          const res = await fetch(`/search?${params.toString()}`);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 90000);
+          let res;
+          try {
+            res = await fetch(`/search?${params.toString()}`, { signal: controller.signal });
+          } finally {
+            clearTimeout(timeoutId);
+          }
           const payload = await res.json();
           if (!res.ok || payload.error) {
             throw new Error(payload.error || `HTTP ${res.status}`);
           }
           renderResults(payload.results || []);
         } catch (err) {
-          setSearchStatus(
-            "Search failed. Make sure the converter ran and the search index exists."
-          );
+          if (err.name === "AbortError") {
+            setSearchStatus("Search timed out — the server may still be loading. Try again in a moment.");
+          } else {
+            setSearchStatus(
+              "Search failed. Make sure the converter ran and the search index exists."
+            );
+          }
           console.error(err);
         }
       }

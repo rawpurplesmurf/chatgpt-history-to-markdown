@@ -1,6 +1,6 @@
 # Feature Spec: 20260227-vector-search-ux
 
-Status: Active
+Status: Done
 Created: 2026-02-27 08:30
 Inputs: CR-20260227-0001
 Decisions: D-20260227-0001
