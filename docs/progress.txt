@@ -1,0 +1,33 @@
+Session: 2026-02-27 08:13
+Agent: Claude Code
+Model: claude-sonnet-4-6
+Skills: athena, superpowers:systematic-debugging
+Feature: 20260227-vector-search-ux
+Input: CR-20260227-0001
+Decisions: D-20260227-0001
+Spec: docs/specs/20260227-vector-search-ux/spec.md
+Tasks: docs/specs/20260227-vector-search-ux/tasks.md
+Git history: docs/audit/git-history.md
+Goal: Diagnose why vector search appears broken and surface the latency issue to users.
+
+DONE
+- [2026-02-27 08:30] Root cause investigation: confirmed backend fully functional; issue is
+  first-load model latency (20-40s). All three search modes verified via direct Python test
+  and live curl. (Skills: athena, superpowers:systematic-debugging)
+
+IN PROGRESS
+
+NEXT
+- T-001: Add startup log line in serve.py indicating vector search enabled/disabled. (Implements: FR-002)
+- T-002: Pre-warm sentence-transformer model in background thread at serve.py startup. (Implements: FR-003)
+- T-003: Verify/fix UI "Searching..." state persists during long model-load waits. (Implements: FR-001)
+
+NOTES
+- Commands run:
+  - .venv/bin/python3 -c "from sentence_transformers import SentenceTransformer; m = SentenceTransformer('all-MiniLM-L6-v2'); print('OK')" -> OK
+  - .venv/bin/pip show torch -> torch 2.9.1 installed
+  - Direct SearchIndex.try_load() test -> embedder loaded, 93290 vectors, vector search returned 3 results
+  - curl /search?q=python+programming&mode=vector -> count: 3, working
+- Risks / open questions:
+  - T-002 (pre-warm) is optional/P2; confirm with user before implementing
+  - Should verify T-003: does the existing "Searching..." text in the UI persist long enough?
