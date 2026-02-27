@@ -42,7 +42,7 @@ class ChatGPTConverter:
         self.output_dir = Path(output_dir)
         self.attachments_dir = self.output_dir / 'attachments'
         self.mermaid_enabled = MERMAID_AVAILABLE and self._env_truthy('CHATGPT_HISTORY_RENDER_MERMAID', default=True)
-        self.build_search_index = self._env_truthy('CHATGPT_HISTORY_BUILD_SEARCH_INDEX', default=True)
+        self.build_search_index = self._env_truthy('CHATGPT_HISTORY_BUILD_SEARCH_INDEX', default=False)
         self._stats_lock = threading.Lock()
         self._attachment_locks_guard = threading.Lock()
         self._attachment_locks: Dict[str, threading.Lock] = {}
@@ -73,6 +73,20 @@ class ChatGPTConverter:
                 lock = threading.Lock()
                 self._attachment_locks[name] = lock
             return lock
+
+    def _safe_timestamp(self, value: Optional[object]) -> Optional[datetime]:
+        if value is None:
+            return None
+        try:
+            ts = float(value)
+        except (TypeError, ValueError):
+            return None
+        if ts <= 0:
+            return None
+        try:
+            return datetime.fromtimestamp(ts)
+        except (OSError, OverflowError, ValueError):
+            return None
 
     def _markdown_matches_conversation_id(self, path: Path, conv_id: str) -> bool:
         """Best-effort check to keep reruns idempotent (overwrite same conversation output)."""
@@ -254,21 +268,35 @@ class ChatGPTConverter:
         
         return None
     
+    # Part content_type values that carry no recoverable text and should be silently skipped.
+    _SKIPPED_PART_TYPES = frozenset({
+        "real_time_user_audio_video_asset_pointer",
+        "audio_asset_pointer",
+        "image_asset_pointer",  # handled via asset_pointer key path above
+    })
+
     def process_message_parts(self, parts: List) -> Tuple[str, List[str]]:
         """Process message parts, extracting text and file references."""
         text_content = []
         attachments = []
-        
+
         for part in parts:
             if isinstance(part, str):
                 text_content.append(part)
             elif isinstance(part, dict):
+                content_type = part.get("content_type", "")
                 # Handle image or file references
                 if 'asset_pointer' in part or 'file_id' in part:
                     file_id = part.get('asset_pointer') or part.get('file_id')
                     if file_id:
                         attachments.append(file_id)
-        
+                elif content_type == "audio_transcription":
+                    transcript = (part.get("text") or "").strip()
+                    if transcript:
+                        text_content.append(f"*[Voice message transcription]*\n\n{transcript}")
+                elif content_type not in self._SKIPPED_PART_TYPES and content_type:
+                    logger.debug("Unhandled message part type %r — skipping.", content_type)
+
         return '\n'.join(text_content), attachments
     
     def format_message(self, role: str, content: str, attachments: List[str]) -> str:
@@ -281,16 +309,16 @@ class ChatGPTConverter:
         }
         
         role_label = f"{role_emoji.get(role, '💬')} **{role.title()}**"
-        
-        # Build message content
-        message = f"### {role_label}\n\n"
-        
+
+        # Build body first; header is only written if there is something to show.
+        body = ""
+
         if content.strip():
             # Check for mermaid diagrams and render them
             mermaid_diagrams = self.detect_mermaid_diagrams(content)
             if mermaid_diagrams and self.mermaid_enabled:
                 logger.info(f"  Found {len(mermaid_diagrams)} mermaid diagram(s) - rendering...")
-                
+
                 # Replace mermaid blocks with image references
                 modified_content = content
                 for i, diagram in enumerate(mermaid_diagrams):
@@ -298,7 +326,7 @@ class ChatGPTConverter:
                     diagram_hash = hashlib.md5(diagram.encode()).hexdigest()[:8]
                     image_name = f"mermaid_{diagram_hash}.png"
                     image_path = self.attachments_dir / image_name
-                    
+
                     # Render diagram
                     try:
                         with self._mermaid_lock:
@@ -339,14 +367,14 @@ class ChatGPTConverter:
                             )
                             break
                         logger.warning(f"  ✗ Failed to render mermaid diagram: {e}")
-                
-                message += f"{modified_content}\n\n"
+
+                body += f"{modified_content}\n\n"
             elif mermaid_diagrams and not self.mermaid_enabled:
                 logger.info(f"  Found {len(mermaid_diagrams)} mermaid diagram(s) but rendering unavailable")
-                message += f"{content}\n\n"
+                body += f"{content}\n\n"
             else:
-                message += f"{content}\n\n"
-        
+                body += f"{content}\n\n"
+
         # Add attachments
         for attachment in attachments:
             attachment_path = self.copy_attachment(attachment)
@@ -354,11 +382,14 @@ class ChatGPTConverter:
                 # Check if it's an image
                 ext = Path(attachment_path).suffix.lower()
                 if ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']:
-                    message += f"![Attachment]({attachment_path})\n\n"
+                    body += f"![Attachment]({attachment_path})\n\n"
                 else:
-                    message += f"📎 [Attachment]({attachment_path})\n\n"
-        
-        return message
+                    body += f"📎 [Attachment]({attachment_path})\n\n"
+
+        if not body:
+            return ""
+
+        return f"### {role_label}\n\n{body}"
     
     def convert_conversation(self, conv: Dict, index: int, total: Optional[int] = None) -> Optional[str]:
         """Convert a single conversation to Markdown."""
@@ -424,8 +455,10 @@ class ChatGPTConverter:
                 text, attachments = self.process_message_parts(parts)
                 
                 if text.strip() or attachments:
-                    md_content += self.format_message(role, text, attachments)
-                    messages_processed += 1
+                    formatted = self.format_message(role, text, attachments)
+                    if formatted:
+                        md_content += formatted
+                        messages_processed += 1
             
             if messages_processed == 0:
                 logger.warning(f"  No displayable messages found")
@@ -481,12 +514,22 @@ class ChatGPTConverter:
             self._increment_stat('failed')
             return None
     
-    def create_index(self, filenames: List[Tuple[str, str, datetime]]) -> None:
+    def create_index(self, filenames: List[Tuple[str, str, Optional[datetime]]]) -> None:
         """Create navigation index file."""
         logger.info("Creating index.md")
-        
+
+        known_entries: List[Tuple[str, str, datetime]] = []
+        unknown_entries: List[Tuple[str, str, Optional[datetime]]] = []
+
+        for title, filename, timestamp in filenames:
+            safe_title = title or "Untitled Conversation"
+            if isinstance(timestamp, datetime):
+                known_entries.append((safe_title, filename, timestamp))
+            else:
+                unknown_entries.append((safe_title, filename, None))
+
         # Sort by date (newest first)
-        filenames.sort(key=lambda x: x[2], reverse=True)
+        known_entries.sort(key=lambda x: x[2], reverse=True)
         
         index_content = "# 📚 ChatGPT Conversation Archive\n\n"
         index_content += f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
@@ -495,7 +538,7 @@ class ChatGPTConverter:
         
         # Group by year-month
         by_month = {}
-        for title, filename, timestamp in filenames:
+        for title, filename, timestamp in known_entries:
             month_key = timestamp.strftime('%Y-%m')
             if month_key not in by_month:
                 by_month[month_key] = []
@@ -510,6 +553,14 @@ class ChatGPTConverter:
                 date_str = timestamp.strftime('%Y-%m-%d')
                 index_content += f"- [{title}]({filename}) - *{date_str}*\n"
             
+            index_content += "\n"
+
+        if unknown_entries:
+            index_content += "## Unknown Date\n\n"
+            for title, filename, _ in sorted(
+                unknown_entries, key=lambda x: x[0].lower() if x[0] else ""
+            ):
+                index_content += f"- [{title}]({filename}) - *Unknown*\n"
             index_content += "\n"
         
         # Write index file
@@ -575,14 +626,14 @@ class ChatGPTConverter:
         logger.info("Starting conversion...")
         logger.info("-" * 60)
         
-        filenames: List[Tuple[str, str, datetime]] = []
+        filenames: List[Tuple[str, str, Optional[datetime]]] = []
 
         def run_one(conversation: Dict, idx: int) -> Optional[Tuple[str, str, datetime]]:
             filename = self.convert_conversation(conversation, idx, total=total)
             if not filename:
                 return None
-            title = conversation.get('title', 'Untitled')
-            timestamp = datetime.fromtimestamp(conversation.get('create_time', 0))
+            title = conversation.get('title') or "Untitled Conversation"
+            timestamp = self._safe_timestamp(conversation.get('create_time'))
             return (title, filename, timestamp)
 
         if workers == 1:
