@@ -9,7 +9,7 @@ Convert your ChatGPT conversation exports into organized, searchable Markdown do
 - 📊 Renders Mermaid diagrams to PNG images (requires pyppeteer)
 - 📚 Generates a chronological index grouped by month
 - ✨ Emoji-tagged messages for easy visual scanning
-- Hybrid search index (keyword + optional vector search) for fast retrieval
+- Optional hybrid search index (keyword + optional vector search) for fast retrieval
 - 🔍 Comprehensive logging and error handling
 - 📁 Organized output with dedicated attachments folder
 
@@ -52,7 +52,7 @@ This repo includes convenience scripts that set up a venv and run common tasks:
 
 - `./run.sh` - Install dependencies and run the converter.
 - `./serve.sh --open` - Start the local viewer and open the browser.
-- `./run_with_vectors.sh` - Install dependencies + sentence-transformers and run the converter (vector search enabled).
+- `./run_with_vectors.sh` - Install dependencies + sentence-transformers and run the converter with search indexing enabled.
 - `./run_with_vectors.sh --serve --open` - Convert and immediately launch the viewer.
 
 ### Web Viewer (Optional)
@@ -68,17 +68,17 @@ Mermaid (```mermaid) and PlantUML (```plantuml / `@startuml`) blocks are rendere
 
 ### Search (Hybrid)
 
-The converter builds a local search index in `markdown/` for the web viewer. Use the search box to run keyword + vector search and jump to matching conversations.
+The converter can build a local search index in `markdown/` for the web viewer. Use the search box to run keyword + vector search and jump to matching conversations. Indexing is disabled by default.
 
 Search index files:
 - `markdown/search.sqlite` (FTS5 keyword index)
 - `markdown/search_meta.json` (chunk metadata)
 - `markdown/search_embeddings.bin` (optional vectors)
 
-Disable indexing:
+Enable indexing:
 
 ```bash
-CHATGPT_HISTORY_BUILD_SEARCH_INDEX=0 python converter.py
+CHATGPT_HISTORY_BUILD_SEARCH_INDEX=1 python converter.py
 ```
 
 Vector search uses `sentence-transformers` when available; otherwise it falls back to a lightweight hashing embedder.
@@ -140,6 +140,16 @@ Messages are tagged with emoji for quick identification:
 - ⚙️ **System** - System messages
 - 🔧 **Tool** - Tool/plugin outputs
 
+Voice messages are converted using the transcript embedded in your export:
+
+```
+*[Voice message transcription]*
+
+What's the best way to handle errors in async Python?
+```
+
+Turns that contain only audio with no transcript are omitted from the output.
+
 ### Attachments
 
 Images are automatically:
@@ -168,6 +178,10 @@ Ensure image files from your export are in `chatgpt-history-source/`. The conver
 ### Conversion failures
 
 Check the console output for specific error messages. Failed conversations are logged with details.
+
+### Vector search times out or returns no results on first use
+
+The sentence-transformer model loads on first use, which can take 20–40 seconds. The server pre-warms the model at startup in the background, but if the server just started, your first vector or hybrid search may show a "timed out" message. Wait a moment and search again — subsequent searches are fast.
 
 ## Development
 
