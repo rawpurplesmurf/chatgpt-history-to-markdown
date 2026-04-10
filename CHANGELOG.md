@@ -4,6 +4,28 @@ All notable changes to the ChatGPT History Converter will be documented in this 
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+- Hybrid search index (FTS5 keyword + optional vector embeddings) built during conversion.
+- `/search` endpoint and web UI search panel for fast retrieval.
+- `run_with_vectors.sh` helper to create a venv, install vector dependencies, and run the converter.
+- Basic unittest coverage for the search index builder and query behavior.
+- Node-based UI smoke test for search panel structure.
+- Advanced search controls (mode, scope, role, date range, sort, limit, snippet size).
+- Voice message transcripts: conversations containing audio turns now include a `*[Voice message transcription]*` block with the embedded transcript text.
+- serve.py pre-warms the sentence-transformer model at startup so the first vector/hybrid search is not delayed.
+- serve.py logs a startup message indicating whether vector search is enabled or disabled.
+- Web UI shows a specific "timed out" message (90 s timeout) if the server is still loading the model on first vector/hybrid search.
+
+### Changed
+- Search indexing is now disabled by default; set `CHATGPT_HISTORY_BUILD_SEARCH_INDEX=1` or use `./run_with_vectors.sh` to enable it.
+
+### Fixed
+- Index generation now handles missing/invalid conversation timestamps and groups them under an "Unknown Date" section.
+- Converter no longer writes bare section headers for turns that produce no text or attachment output (e.g. audio-only turns with no transcript).
+- Hyphenated search queries (e.g. `follow-up`, `co-pay`) no longer crash the FTS5 search with `OperationalError: no such column`.
+
 ## [2.0.0] - 2026-01-03
 
 ### Added
@@ -46,4 +68,3 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Simple index generation
 - Filename sanitization
 - Date-based organization
-

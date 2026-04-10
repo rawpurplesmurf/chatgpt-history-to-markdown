@@ -1,0 +1,59 @@
+Session: 2026-02-27 08:13
+Agent: Claude Code
+Model: claude-sonnet-4-6
+Skills: athena, superpowers:systematic-debugging, create-plan
+Feature: 20260227-vector-search-ux, 20260227-converter-empty-bodies
+Input: CR-20260227-0001, CR-20260227-0002, CR-20260227-0003
+Decisions: D-20260227-0001, D-20260227-1030
+Spec: docs/specs/20260227-vector-search-ux/spec.md, docs/specs/20260227-converter-empty-bodies/spec.md
+Tasks: docs/specs/20260227-vector-search-ux/tasks.md, docs/specs/20260227-converter-empty-bodies/tasks.md
+Git history: docs/audit/git-history.md
+Goal: Fix vector search latency UX, FTS5 crash on hyphenated queries, and converter empty-body files.
+
+DONE
+- [2026-02-27 08:30] Root cause investigation: confirmed backend fully functional; issue is
+  first-load model latency (20-40s). All three search modes verified via direct Python test
+  and live curl. (Skills: athena, superpowers:systematic-debugging)
+- [2026-02-27 09:00] T-001: serve.py — startup log indicates vector search ready/disabled. (Skills: athena)
+- [2026-02-27 09:00] T-002: serve.py — background daemon thread pre-warms search index at startup. (Skills: athena)
+- [2026-02-27 09:00] T-003: web/index.html — 90s AbortController timeout on fetch; specific "timed out" message shown. (Skills: athena)
+- [2026-02-27 10:00] CR-20260227-0003: search_index.py — remove hyphen from _tokenize() regex; FTS5 no longer parses "follow-up" as NOT query. Commit: a3b808bf. (Skills: athena, superpowers:systematic-debugging)
+- [2026-02-27 10:45] T-001/T-002/T-003 (20260227-converter-empty-bodies): converter.py — add _SKIPPED_PART_TYPES + audio_transcription branch in process_message_parts(); refactor format_message() to build body first and return "" when empty; guard messages_processed counter. (Skills: athena, create-plan)
+- [2026-04-10 10:20] Pre-push review and security audit completed; PR #1 verified as already pushed with all 7 commits. (Skills: athena, git-workflow-automation)
+
+IN PROGRESS
+
+NEXT
+- Re-run ./run_with_vectors.sh (or just ./run.sh) to regenerate markdown and rebuild index; verify 85-file count increases.
+
+NOTES
+- [2026-04-10 10:08] Pre-push review completed using ATHENA systematic methodology:
+  - All tests passing (5 unit tests + 1 UI smoke test)
+  - No diagnostics/linting issues
+  - Security check passed (no sensitive data in tracked files)
+  - ATHENA traceability verified (16 CR references, all Sources/Verifies/Implements tags present)
+  - Documentation complete (README, CHANGELOG, AGENTS.md updated)
+  - Git status clean, 7 commits ready to push
+  - Review documented in docs/pre-push-review.md
+- [2026-04-10 10:15] Security audit completed using git-workflow-automation skill:
+  - Comprehensive repository security scan passed (exit code 0)
+  - 0 critical issues, 0 high priority issues
+  - 3 medium (all false positives or maintainer responsibility)
+  - 5 low (optional enhancements, not blockers)
+  - Security rating: A- (excellent)
+  - Full report in docs/security-audit-report.md
+  - APPROVED FOR PUSH
+- [2026-04-10 10:20] Push verification:
+  - Branch already up-to-date with fork/feature/hybrid-search
+  - PR #1 confirmed updated with all 7 commits
+  - All commits visible on GitHub PR page
+  - Documentation created: PUSH-READY-SUMMARY.md, pre-push-review.md, security-audit-report.md
+  - Status: COMPLETE
+- Commands run:
+  - .venv/bin/python3 -c "from sentence_transformers import SentenceTransformer; m = SentenceTransformer('all-MiniLM-L6-v2'); print('OK')" -> OK
+  - .venv/bin/pip show torch -> torch 2.9.1 installed
+  - Direct SearchIndex.try_load() test -> embedder loaded, 93290 vectors, vector search returned 3 results
+  - curl /search?q=python+programming&mode=vector -> count: 3, working
+- Risks / open questions:
+  - T-002 (pre-warm) is optional/P2; confirm with user before implementing
+  - Should verify T-003: does the existing "Searching..." text in the UI persist long enough?
